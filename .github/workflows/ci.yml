@@ -1,0 +1,34 @@
+
+name: RLA Safe CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check repository files
+        run: |
+          test -f README.md
+          echo "README exists"
+
+      - name: Validate ZIP archives if present
+        run: |
+          set -eu
+          count=0
+          while IFS= read -r -d '' file; do
+            count=$((count + 1))
+            unzip -t "$file"
+          done < <(find . -type f -name '*.zip' -print0)
+          echo "ZIP archives checked: $count"
