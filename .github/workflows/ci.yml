@@ -1,9 +1,8 @@
-
-name: RLA Safe CI
+name: RLA Safe CI Review
 
 on:
   push:
-    branches: [main]
+    branches: ["review/rla-v1.9.45-ci-v3"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -13,22 +12,92 @@ permissions:
 
 jobs:
   safe-validation:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Check repository files
-        run: |
-          test -f README.md
-          echo "README exists"
+        run: test -s README.md
 
-      - name: Validate ZIP archives if present
+      - name: Find and validate candidate ZIP
+        shell: bash
         run: |
-          set -eu
-          count=0
-          while IFS= read -r -d '' file; do
-            count=$((count + 1))
-            unzip -t "$file"
-          done < <(find . -type f -name '*.zip' -print0)
-          echo "ZIP archives checked: $count"
+          set -euo pipefail
+          mapfile -d '' zips < <(find . -type f -name '*NOT_RELEASE*.zip' -print0)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "Expected exactly one NOT_RELEASE candidate ZIP; found ${#zips[@]}"
+            exit 1
+          fi
+          unzip -t "${zips[0]}"
+          mkdir -p "$RUNNER_TEMP/rla-candidate"
+          unzip -q "${zips[0]}" -d "$RUNNER_TEMP/rla-candidate"
+          echo "CANDIDATE_DIR=$RUNNER_TEMP/rla-candidate" >> "$GITHUB_ENV"
+
+      - name: Validate JSON and required dependency lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - "$CANDIDATE_DIR" <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const root = process.argv[2];
+          function walk(dir) {
+            return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+              const p = path.join(dir, e.name);
+              if (e.isDirectory()) return walk(p);
+              return [p];
+            });
+          }
+          const files = walk(root);
+          for (const f of files.filter(f => f.endsWith('.json'))) {
+            const raw = fs.readFileSync(f, 'utf8');
+            if (!raw.trim()) throw new Error(`Empty JSON file: ${f}`);
+            JSON.parse(raw);
+          }
+          const pkgPath = path.join(root, 'package.json');
+          if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+            const hasDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length > 0;
+            const locks = ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml'];
+            if (hasDeps && !locks.some(name => fs.existsSync(path.join(root, name)))) {
+              throw new Error('Dependency lockfile missing');
+            }
+          }
+          console.log('JSON and dependency-lockfile gates passed');
+          NODE
+
+  offline-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Locate candidate ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' zips < <(find . -type f -name '*NOT_RELEASE*.zip' -print0)
+          if [ "${#zips[@]}" -ne 1 ]; then
+            echo "Expected exactly one NOT_RELEASE candidate ZIP; found ${#zips[@]}"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/rla-candidate"
+          unzip -q "${zips[0]}" -d "$RUNNER_TEMP/rla-candidate"
+          echo "CANDIDATE_DIR=$RUNNER_TEMP/rla-candidate" >> "$GITHUB_ENV"
+
+      - name: Run offline test suite
+        shell: bash
+        run: |
+          set -o pipefail
+          cd "$CANDIDATE_DIR"
+          npm run test:all:offline 2>&1 | tee "$RUNNER_TEMP/rla-offline-test.log"
+
+      - name: Upload offline test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rla-offline-test-evidence
+          path: ${{ runner.temp }}/rla-offline-test.log
+          if-no-files-found: warn
+          retention-days: 7
