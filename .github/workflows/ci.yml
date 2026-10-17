@@ -16,8 +16,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        - name: Check npm registry connectivity
-          run: npm ping --registry=https://registry.npmjs.org/
+        
 
         - name: Check repository files
           run: |
