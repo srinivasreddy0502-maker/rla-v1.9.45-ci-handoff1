@@ -16,12 +16,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
 
-        - name: Check repository files
-          run: |
-            test -s README.md
-            echo "README exists"
+          - name: Check repository files
+            run: |
+              test -s README.md
+              echo "README exists"
 
       - name: Find and validate candidate ZIP
         shell: bash
