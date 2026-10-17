@@ -17,11 +17,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-          - name: Check repository files
-            run: |
+      - name: Check repository files
+        run: |
               test -s README.md
               echo "README exists"
-
+      - name: Check npm registry connectivity
+        run: npm ping --registry=https://registry.npmjs.org/
       - name: Find and validate candidate ZIP
         shell: bash
         run: |
