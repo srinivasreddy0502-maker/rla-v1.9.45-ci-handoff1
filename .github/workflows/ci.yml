@@ -16,11 +16,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-              - name: Check npm registry connectivity
-        run: npm ping --registry=https://registry.npmjs.org/
+        - name: Check npm registry connectivity
+          run: npm ping --registry=https://registry.npmjs.org/
 
-      - name: Check repository files
-        run: test -s README.md
+        - name: Check repository files
+          run: |
+            test -s README.md
+            echo "README exists"
 
       - name: Find and validate candidate ZIP
         shell: bash
