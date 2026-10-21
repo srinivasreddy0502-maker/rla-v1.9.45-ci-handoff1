@@ -66,17 +66,17 @@ jobs:
             const raw = fs.readFileSync(file, 'utf8');
             if (!raw.trim()) {
               if (path.basename(file) === 'native-sqlite-preflight-v1.9.26.json') {
-                console.log('BLOCKED: Empty preflight evidence file: ${file}');
+                console.log(`BLOCKED: Empty preflight evidence file: ${file}`);
                 blockedJsonCount++;
                 continue;
               }
-              throw new Error(Empty JSON file: ${file});
+              throw new Error(`Empty JSON file: ${file}`);
             }
             JSON.parse(raw);
           }
 
           if (blockedJsonCount > 0) {
-            console.log(Preflight evidence remains BLOCKED: ${blockedJsonCount});
+            console.log(`Preflight evidence remains BLOCKED: ${blockedJsonCount}`);
           }
 
           const pkgPath = path.join(root, 'package.json');
