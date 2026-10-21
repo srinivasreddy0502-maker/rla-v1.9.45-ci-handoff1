@@ -70,11 +70,11 @@ jobs:
 
               if (name.startsWith('native-sqlite-preflight-')) {
                 emptyPreflightFiles.push(file);
-                console.error(BLOCKED: Empty preflight evidence file: ${file});
+                console.error(`BLOCKED: Empty preflight evidence file: ${file}`);
                 continue;
               }
 
-              throw new Error(Empty JSON file: ${file});
+              throw new Error(`Empty JSON file: ${file}`);
             }
 
             try {
