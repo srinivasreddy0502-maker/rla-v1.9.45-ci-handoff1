@@ -60,38 +60,64 @@ jobs:
           }
 
           const files = walk(root);
-          let blockedJsonCount = 0;
+          const emptyPreflightFiles = [];
 
           for (const file of files.filter((filePath) => filePath.endsWith('.json'))) {
             const raw = fs.readFileSync(file, 'utf8');
+
             if (!raw.trim()) {
-              if (path.basename(file) === 'native-sqlite-preflight-v1.9.26.json') {
-                console.log(`BLOCKED: Empty preflight evidence file: ${file}`);
-                blockedJsonCount++;
+              const name = path.basename(file);
+
+              if (name.startsWith('native-sqlite-preflight-')) {
+                emptyPreflightFiles.push(file);
+                console.error(BLOCKED: Empty preflight evidence file: ${file});
                 continue;
               }
-              throw new Error(`Empty JSON file: ${file}`);
+
+              throw new Error(Empty JSON file: ${file});
             }
-            JSON.parse(raw);
+
+            try {
+              JSON.parse(raw);
+            } catch (error) {
+              throw new Error(Invalid JSON file: ${file}: ${error.message});
+            }
           }
 
-          if (blockedJsonCount > 0) {
-            console.log(`Preflight evidence remains BLOCKED: ${blockedJsonCount}`);
+          if (emptyPreflightFiles.length > 0) {
+            throw new Error(
+              `Preflight evidence BLOCKED: ${emptyPreflightFiles.length} empty file(s). ` +
+              'Provide genuine evidence before validation can pass.'
+            );
           }
 
           const pkgPath = path.join(root, 'package.json');
+
           if (fs.existsSync(pkgPath)) {
             const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-            const hasDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length > 0;
-            const locks = ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml'];
-            if (hasDeps && !locks.some((name) => fs.existsSync(path.join(root, name)))) {
+            const hasDeps =
+              Object.keys({
+                ...pkg.dependencies,
+                ...pkg.devDependencies
+              }).length > 0;
+
+            const locks = [
+              'package-lock.json',
+              'npm-shrinkwrap.json',
+              'yarn.lock',
+              'pnpm-lock.yaml'
+            ];
+
+            if (
+              hasDeps &&
+              !locks.some((name) => fs.existsSync(path.join(root, name)))
+            ) {
               throw new Error('Dependency lockfile missing');
             }
           }
 
           console.log('JSON and dependency-lockfile gates passed');
           NODE
-
   offline-tests:
     runs-on: ubuntu-24.04
     steps:
