@@ -80,7 +80,7 @@ jobs:
             try {
               JSON.parse(raw);
             } catch (error) {
-              throw new Error(Invalid JSON file: ${file}: ${error.message});
+              throw new Error(`Invalid JSON file: ${file}: ${error.message}`);
             }
           }
 
