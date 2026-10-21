@@ -18,11 +18,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check repository files
+        shell: bash
         run: |
-              test -s README.md
-              echo "README exists"
+          set -euo pipefail
+          test -s README.md
+          echo "README exists"
+
       - name: Check npm registry connectivity
+        shell: bash
         run: npm ping --registry=https://registry.npmjs.org/
+
       - name: Find and validate candidate ZIP
         shell: bash
         run: |
@@ -45,44 +50,47 @@ jobs:
           const fs = require('fs');
           const path = require('path');
           const root = process.argv[2];
+
           function walk(dir) {
-            return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {
-              const p = path.join(dir, e.name);
-              if (e.isDirectory()) return walk(p);
-              return [p];
+            return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+              const filePath = path.join(dir, entry.name);
+              if (entry.isDirectory()) return walk(filePath);
+              return [filePath];
             });
           }
+
           const files = walk(root);
-let blockedJsonCount = 0;
+          let blockedJsonCount = 0;
 
-for (const f of files.filter(f => f.endsWith('.json'))) {
-  const raw = fs.readFileSync(f, 'utf8');
+          for (const file of files.filter((filePath) => filePath.endsWith('.json'))) {
+            const raw = fs.readFileSync(file, 'utf8');
+            if (!raw.trim()) {
+              if (path.basename(file) === 'native-sqlite-preflight-v1.9.26.json') {
+                console.log(BLOCKED: Empty preflight evidence file: ${file});
+                blockedJsonCount++;
+                continue;
+              }
+              throw new Error(Empty JSON file: ${file});
+            }
+            JSON.parse(raw);
+          }
 
-  if (!raw.trim()) {
-    if (path.basename(f) === 'native-sqlite-preflight-v1.9.26.json') {
-      console.log(`BLOCKED: Empty preflight evidence file: ${f}`);
-      blockedJsonCount++;
-      continue;
-    }
-    throw new Error(`Empty JSON file: ${f}`);
-  }
+          if (blockedJsonCount > 0) {
+            console.log(Preflight evidence remains BLOCKED: ${blockedJsonCount});
+          }
 
-  JSON.parse(raw);
-}
-
-if (blockedJsonCount > 0) {
-  console.log(`Preflight evidence remains BLOCKED: ${blockedJsonCount}`);
-}
           const pkgPath = path.join(root, 'package.json');
           if (fs.existsSync(pkgPath)) {
             const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
             const hasDeps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).length > 0;
             const locks = ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock', 'pnpm-lock.yaml'];
-            if (hasDeps && !locks.some(name => fs.existsSync(path.join(root, name)))) {
+            if (hasDeps && !locks.some((name) => fs.existsSync(path.join(root, name)))) {
               throw new Error('Dependency lockfile missing');
             }
           }
+
           console.log('JSON and dependency-lockfile gates passed');
+          NODE
 
   offline-tests:
     runs-on: ubuntu-24.04
@@ -94,11 +102,12 @@ if (blockedJsonCount > 0) {
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -d '' zips < <(find . -type f -name '*NOT_RELEASE*.zip' -print0)
+          mapfile -d '' zips < <(find . -type f -name '*NOT_RELEASE*.zip*' -print0)
           if [ "${#zips[@]}" -ne 1 ]; then
             echo "Expected exactly one NOT_RELEASE candidate ZIP; found ${#zips[@]}"
             exit 1
           fi
+          unzip -t "${zips[0]}"
           mkdir -p "$RUNNER_TEMP/rla-candidate"
           unzip -q "${zips[0]}" -d "$RUNNER_TEMP/rla-candidate"
           echo "CANDIDATE_DIR=$RUNNER_TEMP/rla-candidate" >> "$GITHUB_ENV"
@@ -106,7 +115,7 @@ if (blockedJsonCount > 0) {
       - name: Run offline test suite
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           cd "$CANDIDATE_DIR"
           npm run test:all:offline 2>&1 | tee "$RUNNER_TEMP/rla-offline-test.log"
 
